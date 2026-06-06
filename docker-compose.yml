@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  tesla-api:
+    build: .
+    container_name: tesla-tracker-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - ./data:/app/data  # Volumen persistente para DB
+    environment:
+      - DATABASE_URL=sqlite:///./data/tesla_tracker.db
+      - DEBUG=True
+    networks:
+      - tesla-network
+
+  tesla-dashboard:
+    build: .
+    container_name: tesla-tracker-dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:///./data/tesla_tracker.db
+      - DEBUG=True
+    command: streamlit run app/dashboard/app.py --server.port=8501 --server.address=0.0.0.0
+    depends_on:
+      - tesla-api
+    networks:
+      - tesla-network
+
+networks:
+  tesla-network:
+    driver: bridge
