@@ -120,7 +120,7 @@ def sample_reservation_data():
             "status": "RESERVED",
             "order_date": datetime(2024, 1, 20),
             "color": "Pearl Multi-Coat",
-            "wheels": "19-inch Überturbine",
+            "wheels": "19-inch Ãœberturbine",
             "vin": "5YJ3E1EA0JF100002",
         },
         {
