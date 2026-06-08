@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.database.database import SessionLocal
 from app.database.models import Reservation
 from app.database.schemas import ReservationCreate
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +56,25 @@ class ReservationCollector:
         """
         try:
             self.logger.info("Fetching reservations from external source...")
-            
-            # Simulated data from external source
-            reservations_data = [
+            settings = get_settings()
+
+            if settings.TESLA_VIN and settings.TESLA_MODEL:
+                self.logger.info("Usando datos de variables de entorno TESLA_*")
+                data: Dict[str, Any] = {
+                    "model": settings.TESLA_MODEL,
+                    "status": settings.TESLA_STATUS or "RESERVED",
+                    "vin": settings.TESLA_VIN,
+                }
+                if settings.TESLA_COLOR:
+                    data["color"] = settings.TESLA_COLOR
+                if settings.TESLA_ETA_START:
+                    data["eta_start"] = datetime.fromisoformat(settings.TESLA_ETA_START)
+                if settings.TESLA_ETA_END:
+                    data["eta_end"] = datetime.fromisoformat(settings.TESLA_ETA_END)
+                return [data]
+
+            self.logger.info("TESLA_VIN no configurado — usando datos de ejemplo")
+            return [
                 {
                     "model": "Model 3",
                     "color": "Midnight Black",
@@ -93,10 +110,6 @@ class ReservationCollector:
                     "notes": "Long Range",
                 },
             ]
-            
-            self.logger.info(f"Successfully fetched {len(reservations_data)} reservations")
-            return reservations_data
-            
         except Exception as e:
             self.logger.error(f"Error fetching reservations: {str(e)}", exc_info=True)
             raise
