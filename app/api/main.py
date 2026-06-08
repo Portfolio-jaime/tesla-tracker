@@ -1,26 +1,30 @@
 from contextlib import asynccontextmanager
 import os
+import re
 from fastapi import FastAPI, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from datetime import datetime
-from typing import Optional, List
+from datetime import datetime, timezone
+from typing import Optional, List, get_args
 
 from app.database.database import get_db, engine
 from app.database.models import Base, Reservation
-from app.database.schemas import ReservationCreate, ReservationUpdate, ReservationResponse
+from app.database.schemas import ReservationCreate, ReservationUpdate, ReservationResponse, ReservationStatus
 from app.core.config import get_settings
 
 settings = get_settings()
 
-VALID_STATUSES = [
-    "RESERVED", "CONFIRMED", "MANUFACTURING", "QUALITY_CHECK",
-    "SHIPPING", "IN_TRANSIT", "DELIVERED", "CANCELLED",
-]
+VALID_STATUSES = list(get_args(ReservationStatus))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    os.makedirs("data", exist_ok=True)
+    db_url = settings.DATABASE_URL
+    # Extract file path from sqlite URL (sqlite:///./path or sqlite:////abs/path)
+    match = re.match(r"sqlite:///(.+)", db_url)
+    if match:
+        db_path = match.group(1)
+        db_dir = os.path.dirname(os.path.abspath(db_path))
+        os.makedirs(db_dir, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     yield
 
@@ -40,7 +44,7 @@ def root():
 
 @app.get("/health", tags=["Health"])
 def health():
-    return {"status": "healthy", "timestamp": datetime.utcnow()}
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc)}
 
 
 @app.get("/api/v1/reservations", response_model=List[ReservationResponse], tags=["Reservations"])
@@ -86,7 +90,7 @@ def update_reservation(reservation_id: int, reservation_update: ReservationUpdat
     if not db_reservation:
         raise HTTPException(status_code=404, detail="Reservation not found")
     update_data = reservation_update.model_dump(exclude_unset=True)
-    update_data["updated_at"] = datetime.utcnow()
+    update_data["updated_at"] = datetime.now(timezone.utc)
     for field, value in update_data.items():
         setattr(db_reservation, field, value)
     db.add(db_reservation)
@@ -112,4 +116,4 @@ def get_stats(db: Session = Depends(get_db)):
     by_model = {}
     for (model,) in db.query(Reservation.model).distinct():
         by_model[model] = db.query(Reservation).filter(Reservation.model == model).count()
-    return {"total": total, "by_status": by_status, "by_model": by_model, "timestamp": datetime.utcnow()}
+    return {"total": total, "by_status": by_status, "by_model": by_model, "timestamp": datetime.now(timezone.utc)}

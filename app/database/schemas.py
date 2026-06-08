@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
 ReservationStatus = Literal[
@@ -13,7 +13,7 @@ class ReservationBase(BaseModel):
     color: Optional[str] = Field(None, max_length=50)
     wheels: Optional[str] = Field(None, max_length=50)
     status: ReservationStatus = "RESERVED"
-    order_date: datetime = Field(default_factory=datetime.utcnow)
+    order_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     eta_start: Optional[datetime] = None
     eta_end: Optional[datetime] = None
     delivery_date: Optional[datetime] = None
