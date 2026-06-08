@@ -63,7 +63,7 @@ class TestReservationsCRUD:
             "model": "Model 3",
             "color": "Solid Black",
             "wheels": "18\" Aero",
-            "status": "BOOKED"
+            "status": "CONFIRMED"
         }
         
         response = client.post("/api/v1/reservations", json=reservation_data)
@@ -102,7 +102,7 @@ class TestReservationsCRUD:
         for i in range(3):
             client.post("/api/v1/reservations", json={
                 "model": f"Model {i}",
-                "status": "BOOKED"
+                "status": "CONFIRMED"
             })
         
         response = client.get("/api/v1/reservations")
@@ -129,7 +129,7 @@ class TestReservationsCRUD:
         # Create
         create_response = client.post("/api/v1/reservations", json={
             "model": "Model 3",
-            "status": "BOOKED"
+            "status": "CONFIRMED"
         })
         reservation_id = create_response.json()["id"]
         
@@ -160,7 +160,7 @@ class TestReservationsCRUD:
         # Create with different statuses
         client.post("/api/v1/reservations", json={
             "model": "Model 3",
-            "status": "BOOKED"
+            "status": "CONFIRMED"
         })
         client.post("/api/v1/reservations", json={
             "model": "Model Y",
@@ -168,10 +168,10 @@ class TestReservationsCRUD:
         })
         
         # Filter
-        response = client.get("/api/v1/reservations?status=BOOKED")
+        response = client.get("/api/v1/reservations?status=CONFIRMED")
         assert response.status_code == 200
         assert len(response.json()) == 1
-        assert response.json()[0]["status"] == "BOOKED"
+        assert response.json()[0]["status"] == "CONFIRMED"
     
     def test_get_reservations_filter_by_model(self):
         # Create with different models
@@ -192,7 +192,7 @@ class TestStats:
         # Create some reservations
         client.post("/api/v1/reservations", json={
             "model": "Model 3",
-            "status": "BOOKED"
+            "status": "CONFIRMED"
         })
         client.post("/api/v1/reservations", json={
             "model": "Model Y",
