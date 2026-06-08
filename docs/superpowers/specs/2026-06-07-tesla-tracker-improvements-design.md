@@ -164,3 +164,4 @@ Estado actualizado: IN_TRANSIT → DELIVERED
 | `tests/test_api.py` | Actualizar estados en tests |
 | `tests/test_collectors.py` | Fix unicode |
 | `.env.example` | Nuevas variables Tesla |
+| `requirements.txt` | Confirmar que `apscheduler` queda instalado (ya está declarado) |

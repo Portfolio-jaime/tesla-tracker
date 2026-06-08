@@ -1,0 +1,80 @@
+<h2>¿Cómo aparece el login de Tesla en la app?</h2>
+<p class="subtitle">Elige la estructura que prefieras para el flujo de autenticación</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Página de login separada</h3>
+      <p>Si no hay sesión activa, Streamlit muestra solo la pantalla de login. Una vez autenticado, redirige al dashboard completo.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Sin sesión → Login</div>
+        <div class="mockup-body" style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px">
+          <div style="font-size:2em">🚗</div>
+          <div style="font-weight:600;font-size:1.1em">Tesla Tracker</div>
+          <input class="mock-input" placeholder="Email de Tesla" style="width:220px">
+          <input class="mock-input" placeholder="Contraseña" style="width:220px">
+          <button class="mock-button" style="width:220px">Iniciar sesión con Tesla</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Sidebar con estado de sesión</h3>
+      <p>El dashboard siempre se ve, pero el sidebar muestra "Conectar con Tesla". Si no hay sesión, los datos son los mocks. Si hay sesión, muestra datos reales.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Dashboard con sidebar de login</div>
+        <div class="mockup-body" style="display:flex;gap:0;padding:0">
+          <div class="mock-sidebar" style="width:160px;padding:12px;font-size:0.82em">
+            <div style="font-weight:600;margin-bottom:8px">🔌 Tesla</div>
+            <div style="color:#f59e0b;margin-bottom:8px">● Sin conectar</div>
+            <input class="mock-input" placeholder="Email" style="width:100%;margin-bottom:6px;font-size:0.8em">
+            <input class="mock-input" placeholder="Pass" style="width:100%;margin-bottom:6px;font-size:0.8em">
+            <button class="mock-button" style="width:100%;font-size:0.8em">Conectar</button>
+            <hr style="margin:10px 0">
+            <div style="font-size:0.8em;color:#6b7280">Filtros</div>
+          </div>
+          <div class="mock-content" style="flex:1;padding:12px;font-size:0.82em">
+            <div style="font-weight:600;margin-bottom:6px">🚗 Tesla Tracker</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <div style="background:#f3f4f6;padding:6px 10px;border-radius:6px;font-size:0.8em">Total: 4</div>
+              <div style="background:#f3f4f6;padding:6px 10px;border-radius:6px;font-size:0.8em">En tránsito: 1</div>
+            </div>
+            <div style="background:#fff3cd;padding:8px;border-radius:6px;font-size:0.8em;color:#856404">⚠️ Mostrando datos de ejemplo — conecta tu cuenta Tesla para ver datos reales</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Modal de login al cargar</h3>
+      <p>El dashboard carga normalmente, pero aparece un modal/banner prominente al inicio pidiendo conectar la cuenta. Se puede omitir para ver datos de ejemplo.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Dashboard con modal al cargar</div>
+        <div class="mockup-body" style="padding:0;position:relative;overflow:hidden">
+          <div style="padding:12px;filter:blur(2px);font-size:0.8em">
+            <div style="font-weight:600;margin-bottom:6px">🚗 Tesla Tracker</div>
+            <div style="display:flex;gap:8px"><div style="background:#f3f4f6;padding:6px 10px;border-radius:6px">Total: 4</div></div>
+          </div>
+          <div style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center">
+            <div style="background:white;border-radius:10px;padding:20px;width:240px;text-align:center">
+              <div style="font-size:1.5em;margin-bottom:8px">🔑</div>
+              <div style="font-weight:600;margin-bottom:4px">Conecta tu cuenta Tesla</div>
+              <div style="font-size:0.8em;color:#6b7280;margin-bottom:12px">Para ver el estado real de tu orden</div>
+              <input class="mock-input" placeholder="Email" style="width:100%;margin-bottom:6px">
+              <input class="mock-input" placeholder="Contraseña" style="width:100%">
+              <button class="mock-button" style="width:100%;margin-top:8px">Conectar</button>
+              <div style="margin-top:8px;font-size:0.75em;color:#9ca3af;cursor:pointer">Ver datos de ejemplo →</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,6 @@
+{"type":"server-started","port":50084,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:50084","screen_dir":"/Users/jaime.henao/arheanja/tesla-tracker/.superpowers/brainstorm/92479-1780890706"}
+{"type":"screen-added","file":"/Users/jaime.henao/arheanja/tesla-tracker/.superpowers/brainstorm/92479-1780890706/login-layout.html"}
+{"source":"user-event","type":"click","text":"A\n    \n      Página de login separada\n      Si no hay sesión activa, Streamlit muestra solo la pantalla de login. Una vez autenticado, redirige al dashboard completo.\n      \n        Sin sesión → Login\n        \n          🚗\n          Tesla Tracker\n          \n          \n          Iniciar sesión con Tesla","choice":"a","id":null,"timestamp":1780890902468}
+{"type":"screen-added","file":"/Users/jaime.henao/arheanja/tesla-tracker/.superpowers/brainstorm/92479-1780890706/waiting-1.html"}
+{"type":"screen-added","file":"/Users/jaime.henao/arheanja/tesla-tracker/.superpowers/brainstorm/92479-1780890706/architecture.html"}
+{"type":"server-stopped","reason":"owner process exited"}
