@@ -10,6 +10,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.database.database import SessionLocal
 from app.database.models import Reservation
+from app.alerts.telegram import TelegramAlert
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,11 @@ class ShippingCollector:
         """
         self.db = db or SessionLocal()
         self.is_managed_session = db is None
+        _settings = get_settings()
+        self._alert = TelegramAlert(
+            token=_settings.TELEGRAM_BOT_TOKEN,
+            chat_id=_settings.TELEGRAM_CHAT_ID,
+        )
 
     def __del__(self):
         """Clean up session if it was created by this instance."""
@@ -187,6 +194,13 @@ class ShippingCollector:
                         new_status = old_status
 
                     reservation.status = new_status
+                    if new_status != old_status:
+                        self._alert.send(
+                            model=reservation.model,
+                            vin=reservation.vin or "",
+                            old_status=old_status,
+                            new_status=new_status,
+                        )
                     reservation.eta_start = update.get(
                         "eta_start", reservation.eta_start
                     )
