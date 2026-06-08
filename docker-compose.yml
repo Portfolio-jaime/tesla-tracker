@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   tesla-api:
     build: .
@@ -7,11 +5,16 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
-      - ./data:/app/data  # Volumen persistente para DB
+      - tesla-data:/app/data
     environment:
       - DATABASE_URL=sqlite:///./data/tesla_tracker.db
-      - DEBUG=True
+      - DEBUG=False
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     networks:
       - tesla-network
 
@@ -21,16 +24,20 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - .:/app
-      - ./data:/app/data
+      - tesla-data:/app/data
     environment:
       - DATABASE_URL=sqlite:///./data/tesla_tracker.db
-      - DEBUG=True
+      - API_BASE_URL=http://tesla-api:8000
+      - DEBUG=False
     command: streamlit run app/dashboard/app.py --server.port=8501 --server.address=0.0.0.0
     depends_on:
-      - tesla-api
+      tesla-api:
+        condition: service_healthy
     networks:
       - tesla-network
+
+volumes:
+  tesla-data:
 
 networks:
   tesla-network:

@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import requests
 import pandas as pd
@@ -11,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
 STATUS_PROGRESSION = [
     "RESERVED", "CONFIRMED", "MANUFACTURING",

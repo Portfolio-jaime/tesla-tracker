@@ -1,0 +1,16 @@
+.venv/
+.env
+data/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+tests/
+.superpowers/
+*.db
+SCHEDULER_INTEGRATION_EXAMPLE.py
+COMPLETION_CHECKLIST.md
+IMPLEMENTATION_SUMMARY.md
+SCHEDULER_DOCS.md
