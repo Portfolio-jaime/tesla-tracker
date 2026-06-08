@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     RELOAD: bool = True
     WORKERS: int = 1
 
+    # Tesla vehicle config (optional — if set, overrides mock data in collectors)
+    TESLA_VIN: str = ""
+    TESLA_MODEL: str = ""
+    TESLA_COLOR: str = ""
+    TESLA_STATUS: str = "RESERVED"
+    TESLA_ETA_START: str = ""  # ISO format: 2026-07-01
+    TESLA_ETA_END: str = ""    # ISO format: 2026-07-15
+
 
 @lru_cache()
 def get_settings() -> Settings:
