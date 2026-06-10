@@ -4,6 +4,7 @@ import requests
 import pandas as pd
 from datetime import datetime
 import plotly.express as px
+from app.auth.tesla_auth import TeslaAuthManager
 
 st.set_page_config(
     page_title="Tesla Tracker Dashboard",
@@ -11,6 +12,26 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# ============================================================================
+# Auth gate — redirect to login if no valid session
+# ============================================================================
+
+_auth = TeslaAuthManager()
+try:
+    _has_session = _auth.has_valid_session()
+except Exception:
+    _auth.logout()
+    _has_session = False
+
+if not _has_session:
+    from app.pages.login import render_login
+    render_login(_auth)
+    st.stop()
+
+# Show session banner in sidebar
+_cached_email = _auth.get_cached_email()
+st.sidebar.success(f"Tesla: {_cached_email or 'conectado'}")
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
@@ -104,8 +125,14 @@ with st.sidebar:
     st.header("Filtros")
     status_filter = st.selectbox("Estado", ["All"] + ALL_STATUSES)
     model_filter = st.text_input("Modelo", placeholder="e.g., Model 3")
-    if st.button("🔄 Refrescar", use_container_width=True):
+    if st.button("Refrescar", use_container_width=True):
         st.cache_data.clear()
+        st.rerun()
+    st.divider()
+    if st.sidebar.button("Cerrar sesion Tesla", use_container_width=True):
+        _auth.logout()
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
         st.rerun()
 
 # ============================================================================
