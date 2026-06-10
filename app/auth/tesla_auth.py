@@ -57,16 +57,26 @@ class TeslaAuthManager:
             raise RuntimeError("No hay sesión activa — tokens no encontrados")
         return teslapy.Tesla(email, cache_file=self._token_path)
 
-    def logout(self) -> None:
-        if os.path.exists(self._token_path):
-            os.remove(self._token_path)
+    def get_vehicles(self) -> list:
+        """Return list of vehicles from Tesla API."""
+        return self.get_tesla_client().vehicle_list()
 
-    def _get_cached_email(self) -> Optional[str]:
+    def get_cached_email(self) -> Optional[str]:
+        """Return the email stored in the token cache, or None."""
+        if not os.path.exists(self._token_path):
+            return None
         try:
             with open(self._token_path) as f:
                 cache = json.load(f)
             if cache:
                 return next(iter(cache))
-        except Exception:
-            pass
+        except (json.JSONDecodeError, OSError):
+            self.logout()  # remove corrupted file
         return None
+
+    def logout(self) -> None:
+        if os.path.exists(self._token_path):
+            os.remove(self._token_path)
+
+    def _get_cached_email(self) -> Optional[str]:
+        return self.get_cached_email()
