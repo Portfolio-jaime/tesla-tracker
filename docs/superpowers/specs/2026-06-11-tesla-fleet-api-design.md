@@ -94,6 +94,8 @@ openssl ecparam -name prime256v1 -genkey -noout -out private.pem
 openssl ec -in private.pem -pubout -out com.tesla.3p.public-key.pem
 ```
 
+> **Seguridad:** `private.pem` **no debe subirse al repositorio**. Agregar `private.pem` a `.gitignore`. Solo `com.tesla.3p.public-key.pem` va al repo de GitHub Pages.
+
 ---
 
 ## Registro en developer.tesla.com
@@ -113,6 +115,7 @@ Tesla asignará un `client_id` que se agrega a `.env`.
 | Escenario | Comportamiento |
 |---|---|
 | `TESLA_CLIENT_ID` vacío | Usa el client_id por defecto de teslapy (mostrará el error previo) |
+| `TESLA_CLIENT_ID` con typo / inválido | Tesla devuelve error OAuth en el redirect; la UI muestra "Autenticación fallida" |
 | App no aprobada aún | Tesla muestra error en la página de auth |
 | Clave pública no accesible | Registro en developer.tesla.com fallará antes de llegar al código |
 
@@ -124,11 +127,18 @@ Los tests existentes (`tests/test_tesla_auth.py`) no requieren cambios. El monke
 
 ```python
 def test_patches_sso_client_id_when_configured(monkeypatch):
-    monkeypatch.setenv("TESLA_CLIENT_ID", "my-fleet-client")
-    auth = TeslaAuthManager()
     import teslapy
+    # Use monkeypatch.setattr so pytest restores the original value after the test.
+    # Also clear lru_cache so get_settings() reads the patched env var fresh.
+    monkeypatch.setenv("TESLA_CLIENT_ID", "my-fleet-client")
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    auth = TeslaAuthManager()
     assert teslapy.SSO_CLIENT_ID == "my-fleet-client"
+    get_settings.cache_clear()  # restore cache for subsequent tests
 ```
+
+**Nota importante:** `teslapy.SSO_CLIENT_ID` es un global de módulo. El monkey-patch en `TeslaAuthManager.__init__` debe ejecutarse **antes** de cualquier llamada a `teslapy.Tesla()` en el proceso, de lo contrario `auto_refresh_kwargs` capturará el `client_id` antiguo. En producción esto se garantiza porque `TeslaAuthManager` se instancia al arrancar antes de cualquier uso de `teslapy.Tesla`.
 
 ---
 
