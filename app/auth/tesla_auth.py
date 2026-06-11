@@ -14,6 +14,10 @@ class TeslaAuthManager:
 
     def __init__(self, token_path: str = DEFAULT_TOKEN_PATH):
         self._token_path = token_path
+        from app.core.config import get_settings
+        client_id = get_settings().TESLA_CLIENT_ID
+        if client_id:
+            teslapy.SSO_CLIENT_ID = client_id
 
     def has_valid_session(self) -> bool:
         if not os.path.exists(self._token_path):
