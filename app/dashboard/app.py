@@ -1,26 +1,25 @@
 import os
 import sys
+
 _root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
-import streamlit as st
 import requests
-import pandas as pd
+import streamlit as st
 from datetime import datetime
-import plotly.express as px
+
 from app.auth.tesla_auth import TeslaAuthManager
+from app.database.models import STEP_KEYS, STEP_LABELS
 
 st.set_page_config(
-    page_title="Tesla Tracker Dashboard",
+    page_title="Tesla Tracker",
     page_icon="🚗",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ============================================================================
-# Auth gate — redirect to login if no valid session
-# ============================================================================
+# ── Auth gate ────────────────────────────────────────────────────────────────
 
 _auth = TeslaAuthManager()
 try:
@@ -34,40 +33,31 @@ if not _has_session:
     render_login(_auth)
     st.stop()
 
-# Show session banner in sidebar
 _cached_email = _auth.get_cached_email()
 st.sidebar.success(f"Tesla: {_cached_email or 'conectado'}")
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
-STATUS_PROGRESSION = [
-    "RESERVED", "CONFIRMED", "MANUFACTURING",
-    "QUALITY_CHECK", "SHIPPING", "IN_TRANSIT", "DELIVERED",
-]
-
-STATUS_LABELS = {
-    "RESERVED": "📋 Reservado",
-    "CONFIRMED": "✅ Confirmado",
-    "MANUFACTURING": "🏭 Fabricando",
-    "QUALITY_CHECK": "🔍 Control QC",
-    "SHIPPING": "📦 Enviando",
-    "IN_TRANSIT": "🚛 En Tránsito",
-    "DELIVERED": "🏠 Entregado",
-    "CANCELLED": "❌ Cancelado",
+STEP_ICONS = {
+    "RESERVA": "📋",
+    "CONFIRMACION": "📄",
+    "PRODUCCION": "🏭",
+    "ENVIO_MARITIMO": "🚢",
+    "ADUANA": "🛃",
+    "ENTREGA": "🏠",
 }
 
-ALL_STATUSES = STATUS_PROGRESSION + ["CANCELLED"]
+# ── Data fetchers ─────────────────────────────────────────────────────────────
 
 
 @st.cache_data(ttl=30)
-def fetch_reservations(status=None, model=None):
+def fetch_reservations():
     try:
-        params = {"skip": 0, "limit": 100}
-        if status and status != "All":
-            params["status"] = status
-        if model:
-            params["model"] = model
-        r = requests.get(f"{API_BASE_URL}/api/v1/reservations", params=params, timeout=5)
+        r = requests.get(
+            f"{API_BASE_URL}/api/v1/reservations",
+            params={"skip": 0, "limit": 100},
+            timeout=5,
+        )
         r.raise_for_status()
         return r.json(), None
     except Exception as e:
@@ -75,189 +65,167 @@ def fetch_reservations(status=None, model=None):
 
 
 @st.cache_data(ttl=30)
-def fetch_stats():
+def fetch_steps(reservation_id: int):
     try:
-        r = requests.get(f"{API_BASE_URL}/api/v1/stats", timeout=5)
+        r = requests.get(
+            f"{API_BASE_URL}/api/v1/reservations/{reservation_id}/steps",
+            timeout=5,
+        )
         r.raise_for_status()
         return r.json(), None
     except Exception as e:
         return None, str(e)
 
 
-def render_status_timeline(current_status: str):
-    if current_status == "CANCELLED":
-        st.error("❌ Esta reserva fue cancelada")
-        return
+# ── UI components ─────────────────────────────────────────────────────────────
 
-    try:
-        idx = STATUS_PROGRESSION.index(current_status)
-    except ValueError:
-        idx = 0
 
-    progress = idx / (len(STATUS_PROGRESSION) - 1)
-    st.progress(progress)
+def render_hero_card(res: dict):
+    with st.container(border=True):
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown(f"## 🚗 Tesla {res['model']} — {res.get('color', '')}")
+            rn = res.get("notes") or "—"
+            order_date = (res.get("order_date") or "")[:10] or "—"
+            st.caption(f"**{rn}** &nbsp;|&nbsp; Reservado: {order_date}")
+        with col2:
+            st.markdown(f"**Estado:** `{res['status']}`")
 
-    cols = st.columns(len(STATUS_PROGRESSION))
-    for i, (col, status) in enumerate(zip(cols, STATUS_PROGRESSION)):
-        label = STATUS_LABELS[status]
-        with col:
-            if i < idx:
-                st.markdown(f"<center>✅<br><small>{label}</small></center>", unsafe_allow_html=True)
-            elif i == idx:
-                st.markdown(f"<center>🔵<br><small><b>{label}</b></small></center>", unsafe_allow_html=True)
+
+def render_edit_form(reservation_id: int, step: dict):
+    key_prefix = f"step_{step['step_key']}"
+
+    completed = st.checkbox(
+        "Marcar como completado",
+        value=step["completed"],
+        key=f"{key_prefix}_completed",
+    )
+
+    date_val = None
+    if step.get("completed_date"):
+        try:
+            date_val = datetime.fromisoformat(step["completed_date"][:19]).date()
+        except Exception:
+            date_val = None
+    completed_date = st.date_input("Fecha", value=date_val, key=f"{key_prefix}_date")
+
+    notes = st.text_input(
+        "Notas (BL, pedimento, referencia...)",
+        value=step.get("notes") or "",
+        key=f"{key_prefix}_notes",
+    )
+
+    if st.button("Guardar", key=f"{key_prefix}_save"):
+        payload = {
+            "completed": completed,
+            "completed_date": completed_date.isoformat() + "T00:00:00" if completed_date else None,
+            "notes": notes or None,
+        }
+        try:
+            r = requests.patch(
+                f"{API_BASE_URL}/api/v1/reservations/{reservation_id}/steps/{step['step_key']}",
+                json=payload,
+                timeout=5,
+            )
+            if r.status_code == 200:
+                st.success("Guardado ✓")
+                st.cache_data.clear()
+                st.rerun()
             else:
-                st.markdown(f"<center>⚪<br><small>{label}</small></center>", unsafe_allow_html=True)
+                st.error(f"Error {r.status_code}: {r.text}")
+        except Exception as e:
+            st.error(f"Error de conexión: {e}")
 
 
-def eta_days_remaining(eta_end_str) -> str:
-    if not eta_end_str:
-        return "Sin ETA"
-    try:
-        eta_end = datetime.fromisoformat(str(eta_end_str).replace("Z", ""))
-        delta = (eta_end - datetime.utcnow()).days
-        if delta < 0:
-            return "Vencida"
-        return f"{delta} días"
-    except Exception:
-        return "—"
+def render_timeline(reservation_id: int, steps: list):
+    completed_count = sum(1 for s in steps if s["completed"])
+    total = len(steps)
+
+    st.progress(completed_count / total, text=f"{completed_count} / {total} pasos completados")
+    st.markdown("---")
+
+    all_done = completed_count == total
+    if all_done:
+        st.success("¡Entrega completada! 🎉")
+        st.balloons()
+
+    active_step = next((s for s in steps if not s["completed"]), None)
+
+    for step in steps:
+        label = STEP_LABELS[step["step_key"]]
+        is_active = active_step and step["step_key"] == active_step["step_key"]
+
+        if step["completed"]:
+            date_str = (step.get("completed_date") or "")[:10] or "—"
+            notes_str = f" — _{step['notes']}_" if step.get("notes") else ""
+            st.markdown(f"✅ **{step['step_order']}. {label}** &nbsp;&nbsp; `{date_str}`{notes_str}")
+            with st.expander(f"Editar: {label}"):
+                render_edit_form(reservation_id, step)
+        elif is_active:
+            st.markdown(
+                f"<div style='border-left: 4px solid #3E6AE1; padding-left: 12px;'>"
+                f"🔵 <b>{step['step_order']}. {label}</b> &nbsp;&nbsp; <i>en progreso</i>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown("")
+            with st.expander(f"✏️ Editar: {label}", expanded=True):
+                render_edit_form(reservation_id, step)
+        else:
+            st.markdown(f"⬜ {step['step_order']}. {label}")
 
 
-# ============================================================================
-# Sidebar
-# ============================================================================
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.header("Filtros")
-    status_filter = st.selectbox("Estado", ["All"] + ALL_STATUSES)
-    model_filter = st.text_input("Modelo", placeholder="e.g., Model 3")
+    st.header("Tesla Tracker")
     if st.button("Refrescar", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
     st.divider()
-    if st.sidebar.button("Cerrar sesion Tesla", use_container_width=True):
+    if st.button("Cerrar sesión Tesla", use_container_width=True):
         _auth.logout()
         for k in list(st.session_state.keys()):
             del st.session_state[k]
         st.rerun()
 
-# ============================================================================
-# Header
-# ============================================================================
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 st.title("🚗 Tesla Tracker")
 
-# ============================================================================
-# KPIs
-# ============================================================================
-
-stats_data, stats_error = fetch_stats()
-
-if stats_data:
-    by_status = stats_data.get("by_status", {})
-    in_transit = by_status.get("IN_TRANSIT", 0) + by_status.get("SHIPPING", 0)
-    delivered = by_status.get("DELIVERED", 0)
-
-    all_res, _ = fetch_reservations()
-    next_eta = "—"
-    if all_res:
-        active = [r for r in all_res if r.get("eta_end") and r.get("status") not in ("DELIVERED", "CANCELLED")]
-        if active:
-            soonest = min(active, key=lambda r: r["eta_end"])
-            next_eta = eta_days_remaining(soonest["eta_end"]) + f" ({soonest['model']})"
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total", stats_data["total"])
-    col2.metric("En Tránsito", in_transit)
-    col3.metric("Entregados", delivered)
-    col4.metric("Próxima entrega", next_eta)
-
-st.divider()
-
-# ============================================================================
-# Main data
-# ============================================================================
-
-reservations_data, res_error = fetch_reservations(
-    status=None if status_filter == "All" else status_filter,
-    model=model_filter or None,
-)
+reservations, res_error = fetch_reservations()
 
 if res_error:
-    st.error(f"❌ Error: {res_error}")
+    st.error(f"❌ No se puede conectar a la API: {res_error}")
     st.info("Asegúrate que la API está corriendo: `uvicorn app.api.main:app --reload`")
     st.stop()
 
-# ============================================================================
-# Vehicle detail
-# ============================================================================
+if not reservations:
+    st.info("No hay reservas. Agrega una desde la API en `/docs`.")
+    st.stop()
 
-if reservations_data:
+# Auto-select if only one reservation; show selector in sidebar if multiple
+if len(reservations) == 1:
+    selected = reservations[0]
+else:
     options = {
-        f"{r['model']} — VIN: {(r.get('vin') or 'Sin VIN')[:10]} [{r['status']}]": r
-        for r in reservations_data
+        f"{r['model']} — {r.get('color', '')} [{r['status']}]": r
+        for r in reservations
     }
-    selected_label = st.selectbox("Selecciona un vehículo para ver detalle", list(options.keys()))
+    with st.sidebar:
+        selected_label = st.selectbox("Reserva", list(options.keys()))
     selected = options[selected_label]
 
-    with st.container(border=True):
-        st.subheader(f"🚗 {selected['model']} — {selected.get('color', '')}")
-        render_status_timeline(selected["status"])
+render_hero_card(selected)
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Estado actual", STATUS_LABELS.get(selected["status"], selected["status"]))
-        c2.metric("ETA restante", eta_days_remaining(selected.get("eta_end")))
-        c3.metric("VIN", selected.get("vin") or "Sin asignar")
+st.markdown("### 📦 Estado de compra")
 
-        if selected.get("notes"):
-            st.caption(f"📝 {selected['notes']}")
+steps, steps_error = fetch_steps(selected["id"])
 
-st.divider()
-
-# ============================================================================
-# Distribution + table
-# ============================================================================
-
-col_chart, col_table = st.columns([1, 2])
-
-with col_chart:
-    st.subheader("📊 Por estado")
-    if stats_data:
-        status_df = pd.DataFrame(
-            [(k, v) for k, v in stats_data["by_status"].items() if v > 0],
-            columns=["Estado", "Count"],
-        )
-        if not status_df.empty:
-            fig = px.pie(status_df, values="Count", names="Estado", hole=0.4)
-            fig.update_layout(margin=dict(t=0, b=0, l=0, r=0))
-            st.plotly_chart(fig, use_container_width=True)
-
-with col_table:
-    st.subheader("📋 Lista de reservas")
-    if reservations_data:
-        df = pd.DataFrame(reservations_data)
-        display_cols = ["id", "model", "color", "status", "vin", "eta_start", "eta_end"]
-        df_display = df[[c for c in display_cols if c in df.columns]]
-        st.dataframe(
-            df_display,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "id": st.column_config.NumberColumn("ID", width="small"),
-                "model": st.column_config.TextColumn("Modelo"),
-                "color": st.column_config.TextColumn("Color"),
-                "status": st.column_config.TextColumn("Estado"),
-                "vin": st.column_config.TextColumn("VIN"),
-                "eta_start": st.column_config.DatetimeColumn("ETA Inicio"),
-                "eta_end": st.column_config.DatetimeColumn("ETA Fin"),
-            },
-        )
-        st.caption(f"Mostrando {len(reservations_data)} reservas")
-    else:
-        st.info("No hay reservas")
-
-# ============================================================================
-# Footer
-# ============================================================================
+if steps_error:
+    st.error(f"❌ Error cargando pasos: {steps_error}")
+else:
+    render_timeline(selected["id"], steps)
 
 st.divider()
 st.caption(f"Actualizado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
