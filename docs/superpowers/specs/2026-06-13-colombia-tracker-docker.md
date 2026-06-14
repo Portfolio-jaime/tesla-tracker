@@ -10,16 +10,20 @@ Replace the generic status dropdown with a 6-step Colombia-specific purchase tim
 
 ### New table: `purchase_steps`
 
-| Column           | Type     | Constraints                        |
-|------------------|----------|------------------------------------|
-| id               | INTEGER  | PK                                 |
-| reservation_id   | INTEGER  | FK → reservations.id, NOT NULL     |
-| step_order       | INTEGER  | 1–6, NOT NULL                      |
-| step_key         | TEXT     | NOT NULL (see keys below)          |
-| completed        | BOOLEAN  | default false                      |
-| completed_date   | DATETIME | nullable                           |
-| notes            | TEXT     | nullable                           |
-| updated_at       | DATETIME | default now, auto-update on write  |
+| Column           | Type     | Constraints                                      |
+|------------------|----------|--------------------------------------------------|
+| id               | INTEGER  | PK                                               |
+| reservation_id   | INTEGER  | FK → reservations.id, NOT NULL                   |
+| step_order       | INTEGER  | 1–6, NOT NULL                                    |
+| step_key         | TEXT     | NOT NULL (see keys below)                        |
+| completed        | BOOLEAN  | default false                                    |
+| completed_date   | DATETIME | nullable                                         |
+| notes            | TEXT     | nullable                                         |
+| updated_at       | DATETIME | server default now; must be set explicitly on ORM update |
+
+**Unique constraints:** `UNIQUE(reservation_id, step_order)` and `UNIQUE(reservation_id, step_key)`.
+
+**ORM-only writes required.** All inserts and updates to `purchase_steps` must go through SQLAlchemy ORM (not raw SQL) so that `updated_at` fires via `onupdate=`.
 
 **Step keys (fixed, in order):**
 
@@ -32,7 +36,7 @@ Replace the generic status dropdown with a 6-step Colombia-specific purchase tim
 | 5          | ADUANA          | Aduana Colombia      |
 | 6          | ENTREGA         | Entrega              |
 
-**Lifecycle:** When a `Reservation` is created (or on first GET of steps for an existing reservation), all 6 `PurchaseStep` rows are auto-created with `completed=false`. Step names/order are never editable — only `completed`, `completed_date`, and `notes`.
+**Lifecycle:** When a `Reservation` is created (or on first GET/PATCH of steps for an existing reservation), all 6 `PurchaseStep` rows are auto-created with `completed=false`. The unique constraints make this idempotent — duplicate calls will not create duplicate rows. Step names/order are never editable — only `completed`, `completed_date`, and `notes`.
 
 ### Existing `reservations` table
 
@@ -46,7 +50,7 @@ Two new endpoints on the existing FastAPI app:
 
 ### `GET /api/v1/reservations/{id}/steps`
 
-Returns the 6 steps for a reservation. Auto-creates them if missing (idempotent).
+Returns the 6 steps for a reservation. Auto-creates them if missing (idempotent). Returns **404** if the reservation itself does not exist.
 
 Response: list of step objects sorted by `step_order`.
 
@@ -81,7 +85,10 @@ Request body (all fields optional):
 
 Returns the updated step object.
 
-**Validation:** `step_key` must be one of the 6 valid keys; 404 if reservation not found; 400 if invalid key.
+**Validation:**
+- 404 if reservation not found
+- 400 if `step_key` is not one of the 6 valid keys
+- If the 6 step rows don't exist yet (e.g., GET was never called), PATCH auto-seeds them first, then applies the update — same idempotent logic as GET.
 
 ---
 
@@ -112,12 +119,12 @@ Returns the updated step object.
 
 ### Behavior
 
-- **Active step** = first step where `completed=false` → highlighted in Tesla blue (#3E6AE1)
+- **Active step** = first step where `completed=false` → highlighted in Tesla blue (#3E6AE1). If all 6 steps are completed, no step is highlighted and a "¡Entrega completada! 🎉" banner replaces the timeline header.
 - **Completed steps** → green checkmark + date + notes (if any)
 - **Pending steps** → grey, no date
 - **Edit form** → inline expander under the active step; any step can be clicked to edit
 - **Progress bar** → `completed_count / 6` displayed as `st.progress()` + label
-- **Hero card** → shows model, color, RN (from `notes` of step 1 or reservation notes), order date, current `status`
+- **Hero card** → shows model, color, RN (canonical source: `reservation.notes` field), order date, current `status`
 
 ### Pages structure
 
@@ -153,30 +160,39 @@ services:
     volumes: [tesla-data:/app/data]
     healthcheck: (existing)
     networks: [tesla-network]
+    # No ports exposed directly — all traffic goes through nginx
 
   dashboard:
     build: { context: ., target: production }
     env_file: .env
     volumes: [tesla-data:/app/data]
+    environment:
+      - API_BASE_URL=http://api:8000   # internal Docker network
     command: streamlit run app/dashboard/app.py --server.port=8501 --server.address=0.0.0.0
     depends_on:
       api: { condition: service_healthy }
     networks: [tesla-network]
+    # No ports exposed directly — all traffic goes through nginx
 
   api-dev:
     build: { context: ., target: dev }
     profiles: [dev]
     env_file: .env
-    ports: ["8000:8000"]
+    ports: ["8000:8000"]   # exposed for direct access in dev
     volumes: [.:/app, tesla-data:/app/data]
+    networks: [tesla-network]
     command: uvicorn app.api.main:app --reload --host 0.0.0.0 --port 8000
 
   dashboard-dev:
     build: { context: ., target: dev }
     profiles: [dev]
     env_file: .env
-    ports: ["8501:8501"]
+    ports: ["8501:8501"]   # exposed for direct access in dev
     volumes: [.:/app, tesla-data:/app/data]
+    environment:
+      - API_BASE_URL=http://api-dev:8000   # dev containers share tesla-network
+    networks: [tesla-network]
+    depends_on: [api-dev]
     command: streamlit run app/dashboard/app.py --server.port=8501 --server.address=0.0.0.0
 
 volumes:
@@ -188,12 +204,34 @@ networks:
 
 ### nginx.conf
 
+File lives at repo root: `nginx.conf` (mounted read-only into nginx container).
+
 ```nginx
 server {
     listen 80;
-    location /api { proxy_pass http://api:8000; }
-    location /docs { proxy_pass http://api:8000/docs; }
-    location / { proxy_pass http://dashboard:8501; }
+
+    # FastAPI — strip no prefix; routes already start with /api or /health
+    location /api/ {
+        proxy_pass http://api:8000/api/;
+    }
+    location /health {
+        proxy_pass http://api:8000/health;
+    }
+    # FastAPI docs — trailing slash redirect handled by proxy
+    location /docs {
+        proxy_pass http://api:8000/docs;
+        proxy_redirect off;
+    }
+    location /openapi.json {
+        proxy_pass http://api:8000/openapi.json;
+    }
+    # Dashboard — catch-all
+    location / {
+        proxy_pass http://dashboard:8501;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
 }
 ```
 
