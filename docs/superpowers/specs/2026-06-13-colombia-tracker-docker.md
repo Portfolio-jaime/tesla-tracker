@@ -19,7 +19,7 @@ Replace the generic status dropdown with a 6-step Colombia-specific purchase tim
 | completed        | BOOLEAN  | default false                                    |
 | completed_date   | DATETIME | nullable                                         |
 | notes            | TEXT     | nullable                                         |
-| updated_at       | DATETIME | server default now; must be set explicitly on ORM update |
+| updated_at       | DATETIME | `default=datetime.utcnow, onupdate=datetime.utcnow` (function reference, not call — matches existing Reservation model) |
 
 **Unique constraints:** `UNIQUE(reservation_id, step_order)` and `UNIQUE(reservation_id, step_key)`.
 
@@ -36,7 +36,7 @@ Replace the generic status dropdown with a 6-step Colombia-specific purchase tim
 | 5          | ADUANA          | Aduana Colombia      |
 | 6          | ENTREGA         | Entrega              |
 
-**Lifecycle:** When a `Reservation` is created (or on first GET/PATCH of steps for an existing reservation), all 6 `PurchaseStep` rows are auto-created with `completed=false`. The unique constraints make this idempotent — duplicate calls will not create duplicate rows. Step names/order are never editable — only `completed`, `completed_date`, and `notes`.
+**Lifecycle (lazy seed):** Steps are auto-created on the first GET or PATCH call — NOT on `POST /api/v1/reservations`. This keeps the existing create endpoint untouched. The existing `POST` endpoint does NOT need modification. The unique constraints make this idempotent — duplicate calls will not create duplicate rows. Step names/order are never editable — only `completed`, `completed_date`, and `notes`.
 
 ### Existing `reservations` table
 
@@ -82,6 +82,8 @@ Request body (all fields optional):
   "notes": "BL número: ABCD1234"
 }
 ```
+
+**Datetime handling:** All datetimes are naive UTC (no timezone suffix), consistent with the existing `Reservation` model. The API accepts and returns naive ISO strings (e.g. `"2026-05-09T00:00:00"` — no `Z` suffix).
 
 Returns the updated step object.
 
@@ -153,6 +155,7 @@ services:
     ports: ["80:80"]
     volumes: [./nginx.conf:/etc/nginx/conf.d/default.conf:ro]
     depends_on: [api, dashboard]
+    networks: [tesla-network]
 
   api:
     build: { context: ., target: production }
