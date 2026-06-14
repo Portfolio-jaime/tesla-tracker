@@ -26,6 +26,7 @@ def _ensure_steps(reservation_id: int, db: Session) -> list:
         .all()
     )
     existing_keys = {s.step_key for s in existing}
+    added = False
     for i, key in enumerate(STEP_KEYS, start=1):
         if key not in existing_keys:
             db.add(PurchaseStep(
@@ -34,7 +35,8 @@ def _ensure_steps(reservation_id: int, db: Session) -> list:
                 step_key=key,
                 completed=False,
             ))
-    if len(existing_keys) < len(STEP_KEYS):
+            added = True
+    if added:
         db.commit()
     return (
         db.query(PurchaseStep)
@@ -177,8 +179,10 @@ def update_step(
         )
         .first()
     )
+    if step is None:
+        raise HTTPException(status_code=404, detail="Step not found")
     update_data = update.model_dump(exclude_unset=True)
-    update_data["updated_at"] = datetime.utcnow()
+    update_data["updated_at"] = datetime.now(timezone.utc)
     for field, value in update_data.items():
         setattr(step, field, value)
     db.add(step)
