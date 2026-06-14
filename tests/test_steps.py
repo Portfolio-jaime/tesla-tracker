@@ -99,6 +99,8 @@ class TestStepsAPI:
         assert data["completed"] is True
         assert data["notes"] == "RN128096402"
         assert "2026-05-09" in data["completed_date"]
+        assert not data["completed_date"].endswith("Z")
+        assert not data["updated_at"].endswith("Z")
 
     def test_patch_step_invalid_key(self):
         res_id = make_reservation()
