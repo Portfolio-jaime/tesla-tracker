@@ -43,3 +43,24 @@ class ReservationResponse(ReservationBase):
     id: int
     created_at: datetime
     updated_at: datetime
+
+
+# --- Purchase Steps ---
+
+class PurchaseStepResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    reservation_id: int
+    step_order: int
+    step_key: str
+    completed: bool
+    completed_date: Optional[datetime] = None
+    notes: Optional[str] = None
+    updated_at: datetime
+
+
+class PurchaseStepUpdate(BaseModel):
+    completed: Optional[bool] = None
+    completed_date: Optional[datetime] = None
+    notes: Optional[str] = None
