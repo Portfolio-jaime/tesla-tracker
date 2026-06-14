@@ -7,6 +7,7 @@ __pycache__/
 .env
 
 data/*.db
+test*.db
 data/tokens.json
 .superpowers/
 private.pem
