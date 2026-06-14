@@ -65,6 +65,12 @@ services:
     volumes:
       - .:/app
       - tesla-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     networks:
       - tesla-network
     command: uvicorn app.api.main:app --reload --host 0.0.0.0 --port 8000
@@ -86,7 +92,8 @@ services:
     networks:
       - tesla-network
     depends_on:
-      - api-dev
+      api-dev:
+        condition: service_healthy
     command: streamlit run app/dashboard/app.py --server.port=8501 --server.address=0.0.0.0
 
 volumes:
