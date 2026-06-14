@@ -7,13 +7,41 @@ from datetime import datetime, timezone
 from typing import Optional, List, get_args
 
 from app.database.database import get_db, engine
-from app.database.models import Base, Reservation
-from app.database.schemas import ReservationCreate, ReservationUpdate, ReservationResponse, ReservationStatus
+from app.database.models import Base, Reservation, PurchaseStep, STEP_KEYS
+from app.database.schemas import (
+    ReservationCreate, ReservationUpdate, ReservationResponse, ReservationStatus,
+    PurchaseStepResponse, PurchaseStepUpdate,
+)
 from app.core.config import get_settings
 
 settings = get_settings()
 
 VALID_STATUSES = list(get_args(ReservationStatus))
+
+
+def _ensure_steps(reservation_id: int, db: Session) -> list:
+    existing = (
+        db.query(PurchaseStep)
+        .filter(PurchaseStep.reservation_id == reservation_id)
+        .all()
+    )
+    existing_keys = {s.step_key for s in existing}
+    for i, key in enumerate(STEP_KEYS, start=1):
+        if key not in existing_keys:
+            db.add(PurchaseStep(
+                reservation_id=reservation_id,
+                step_order=i,
+                step_key=key,
+                completed=False,
+            ))
+    if len(existing_keys) < len(STEP_KEYS):
+        db.commit()
+    return (
+        db.query(PurchaseStep)
+        .filter(PurchaseStep.reservation_id == reservation_id)
+        .order_by(PurchaseStep.step_order)
+        .all()
+    )
 
 
 @asynccontextmanager
@@ -107,6 +135,56 @@ def delete_reservation(reservation_id: int, db: Session = Depends(get_db)):
     db.delete(db_reservation)
     db.commit()
     return None
+
+
+@app.get(
+    "/api/v1/reservations/{reservation_id}/steps",
+    response_model=List[PurchaseStepResponse],
+    tags=["Steps"],
+)
+def get_steps(reservation_id: int, db: Session = Depends(get_db)):
+    reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
+    if not reservation:
+        raise HTTPException(status_code=404, detail="Reservation not found")
+    return _ensure_steps(reservation_id, db)
+
+
+@app.patch(
+    "/api/v1/reservations/{reservation_id}/steps/{step_key}",
+    response_model=PurchaseStepResponse,
+    tags=["Steps"],
+)
+def update_step(
+    reservation_id: int,
+    step_key: str,
+    update: PurchaseStepUpdate,
+    db: Session = Depends(get_db),
+):
+    if step_key not in STEP_KEYS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid step_key. Must be one of: {STEP_KEYS}",
+        )
+    reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
+    if not reservation:
+        raise HTTPException(status_code=404, detail="Reservation not found")
+    _ensure_steps(reservation_id, db)
+    step = (
+        db.query(PurchaseStep)
+        .filter(
+            PurchaseStep.reservation_id == reservation_id,
+            PurchaseStep.step_key == step_key,
+        )
+        .first()
+    )
+    update_data = update.model_dump(exclude_unset=True)
+    update_data["updated_at"] = datetime.utcnow()
+    for field, value in update_data.items():
+        setattr(step, field, value)
+    db.add(step)
+    db.commit()
+    db.refresh(step)
+    return step
 
 
 @app.get("/api/v1/stats", tags=["Analytics"])
