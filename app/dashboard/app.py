@@ -38,15 +38,6 @@ st.sidebar.success(f"Tesla: {_cached_email or 'conectado'}")
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
-STEP_ICONS = {
-    "RESERVA": "📋",
-    "CONFIRMACION": "📄",
-    "PRODUCCION": "🏭",
-    "ENVIO_MARITIMO": "🚢",
-    "ADUANA": "🛃",
-    "ENTREGA": "🏠",
-}
-
 # ── Data fetchers ─────────────────────────────────────────────────────────────
 
 
@@ -147,12 +138,14 @@ def render_timeline(reservation_id: int, steps: list):
     all_done = completed_count == total
     if all_done:
         st.success("¡Entrega completada! 🎉")
-        st.balloons()
+        if not st.session_state.get("_balloons_shown"):
+            st.session_state["_balloons_shown"] = True
+            st.balloons()
 
     active_step = next((s for s in steps if not s["completed"]), None)
 
     for step in steps:
-        label = STEP_LABELS[step["step_key"]]
+        label = STEP_LABELS.get(step["step_key"], step["step_key"])
         is_active = active_step and step["step_key"] == active_step["step_key"]
 
         if step["completed"]:
