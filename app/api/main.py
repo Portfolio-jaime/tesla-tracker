@@ -265,6 +265,22 @@ def _sync_vehicles(db: Session, vehicles: list) -> None:
     db.commit()
 
 
+@app.post("/api/v1/sync", tags=["Auth"])
+def sync_vehicles_endpoint(clear_all: bool = False, db: Session = Depends(get_db)):
+    auth = TeslaAuthManager()
+    if not auth.has_valid_session():
+        raise HTTPException(status_code=401, detail="No hay sesión activa de Tesla")
+    try:
+        vehicles = TeslaCollector(auth).fetch_reservations()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Error al consultar Tesla API: {e}")
+    if clear_all:
+        db.query(Reservation).delete()
+        db.commit()
+    _sync_vehicles(db, vehicles)
+    return {"synced": len(vehicles)}
+
+
 @app.get("/api/v1/stats", tags=["Analytics"])
 def get_stats(db: Session = Depends(get_db)):
     total = db.query(Reservation).count()
