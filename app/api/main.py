@@ -2,6 +2,8 @@ from contextlib import asynccontextmanager
 import os
 import re
 from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import Optional, List, get_args
@@ -13,10 +15,21 @@ from app.database.schemas import (
     PurchaseStepResponse, PurchaseStepUpdate,
 )
 from app.core.config import get_settings
+from app.auth.tesla_auth import TeslaAuthManager
+from app.collectors.tesla import TeslaCollector
 
 settings = get_settings()
 
 VALID_STATUSES = list(get_args(ReservationStatus))
+
+# ── Auth state (in-memory; resets on restart) ─────────────────────────────────
+_CALLBACK_URL = os.environ.get("AUTH_CALLBACK_URL", "http://localhost/auth/callback")
+_pending_auth: dict = {}   # state -> {email, code_verifier}
+_completed_auth: dict = {} # state -> email
+
+
+class AuthStartRequest(BaseModel):
+    email: str
 
 
 def _ensure_steps(reservation_id: int, db: Session) -> list:
@@ -189,6 +202,67 @@ def update_step(
     db.commit()
     db.refresh(step)
     return step
+
+
+@app.post("/api/v1/auth/start", tags=["Auth"])
+def auth_start(body: AuthStartRequest):
+    auth = TeslaAuthManager()
+    auth_url, state, cv = auth.start_auth(body.email, redirect_uri=_CALLBACK_URL)
+    _pending_auth[state] = {"email": body.email, "code_verifier": cv}
+    return {"auth_url": auth_url, "state": state}
+
+
+@app.get("/auth/callback", tags=["Auth"], include_in_schema=False)
+def auth_callback(code: str, state: str, db: Session = Depends(get_db)):
+    pending = _pending_auth.pop(state, None)
+    if not pending:
+        raise HTTPException(status_code=400, detail="Estado inválido — inicia auth de nuevo")
+    auth = TeslaAuthManager()
+    full_callback = f"{_CALLBACK_URL}?code={code}&state={state}"
+    ok = auth.complete_auth(
+        pending["email"], full_callback, state, pending["code_verifier"],
+        redirect_uri=_CALLBACK_URL,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail="Autenticación fallida")
+    _completed_auth[state] = pending["email"]
+    try:
+        vehicles = TeslaCollector(auth).fetch_reservations()
+        _sync_vehicles(db, vehicles)
+    except Exception:
+        pass  # auth fue exitosa; sync puede fallar si la API Tesla no responde
+    return RedirectResponse(url="http://localhost/")
+
+
+@app.get("/api/v1/auth/status/{state}", tags=["Auth"])
+def auth_status(state: str):
+    email = _completed_auth.get(state)
+    return {"completed": email is not None, "email": email}
+
+
+def _sync_vehicles(db: Session, vehicles: list) -> None:
+    now = datetime.now(timezone.utc)
+    for v in vehicles:
+        if not v.get("vin") or not v.get("model"):
+            continue
+        existing = db.query(Reservation).filter(Reservation.vin == v["vin"]).first()
+        if existing:
+            for field in ("model", "color", "status", "notes"):
+                if v.get(field):
+                    setattr(existing, field, v[field])
+            existing.updated_at = now
+        else:
+            db.add(Reservation(
+                model=v["model"],
+                color=v.get("color") or "",
+                status=v.get("status", "RESERVED"),
+                notes=v.get("notes"),
+                vin=v["vin"],
+                order_date=now,
+                created_at=now,
+                updated_at=now,
+            ))
+    db.commit()
 
 
 @app.get("/api/v1/stats", tags=["Analytics"])

@@ -31,26 +31,34 @@ class TeslaAuthManager:
         except Exception:
             return False
 
-    def start_auth(self, email: str) -> Tuple[str, str, str]:
+    def start_auth(self, email: str, redirect_uri: Optional[str] = None) -> Tuple[str, str, str]:
         """Start OAuth2 PKCE flow. Returns (auth_url, state, code_verifier)."""
         os.makedirs(os.path.dirname(os.path.abspath(self._token_path)), exist_ok=True)
         tesla = teslapy.Tesla(email, cache_file=self._token_path)
+        tesla.scope = ('openid', 'email', 'offline_access', 'vehicle_device_data', 'vehicle_location', 'vehicle_cmds', 'vehicle_charging_cmds')
         state = tesla.new_state()
         code_verifier = tesla.new_code_verifier()
-        auth_url = tesla.authorization_url(state=state, code_verifier=code_verifier)
+        kwargs: dict = {"state": state, "code_verifier": code_verifier}
+        if redirect_uri:
+            kwargs["redirect_uri"] = redirect_uri
+        auth_url = tesla.authorization_url(**kwargs)
         return auth_url, state, code_verifier
 
     def complete_auth(
-        self, email: str, callback_url: str, state: str, code_verifier: str
+        self, email: str, callback_url: str, state: str, code_verifier: str,
+        redirect_uri: Optional[str] = None,
     ) -> bool:
         """Complete OAuth2 PKCE flow. Returns True on success."""
         tesla = teslapy.Tesla(email, cache_file=self._token_path)
+        kwargs: dict = {
+            "authorization_response": callback_url,
+            "state": state,
+            "code_verifier": code_verifier,
+        }
+        if redirect_uri:
+            kwargs["redirect_uri"] = redirect_uri
         try:
-            tesla.fetch_token(
-                authorization_response=callback_url,
-                state=state,
-                code_verifier=code_verifier,
-            )
+            tesla.fetch_token(**kwargs)
         except Exception:
             return False
         return bool(tesla.authorized)

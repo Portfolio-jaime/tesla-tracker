@@ -24,8 +24,9 @@ class Settings(BaseSettings):
     TESLA_STATUS: str = "RESERVED"
     TESLA_ETA_START: str = ""  # ISO format: 2026-07-01
     TESLA_ETA_END: str = ""    # ISO format: 2026-07-15
-    # Tesla Fleet API client_id — obtener en developer.tesla.com
+    # Tesla Fleet API client_id y secret — obtener en developer.tesla.com
     TESLA_CLIENT_ID: str = ""
+    TESLA_CLIENT_SECRET: str = ""
 
 
 @lru_cache()

@@ -1,8 +1,13 @@
+import os
+import time
+
+import requests
 import streamlit as st
-from app.auth.tesla_auth import TeslaAuthManager
+
+_API_BASE = os.environ.get("API_URL", "http://localhost:8000")
 
 
-def render_login(auth: TeslaAuthManager) -> None:
+def render_login(_auth=None) -> None:
     st.markdown(
         """
         <div style='text-align:center;padding:60px 0 20px'>
@@ -21,73 +26,58 @@ def render_login(auth: TeslaAuthManager) -> None:
             with st.form("tesla_start"):
                 email = st.text_input("Email de tu cuenta Tesla")
                 submitted = st.form_submit_button(
-                    "Generar enlace de Tesla", use_container_width=True
+                    "Conectar cuenta Tesla", use_container_width=True
                 )
             if submitted:
                 if not email:
                     st.error("Introduce tu email de Tesla")
                 else:
                     try:
-                        auth_url, state, cv = auth.start_auth(email)
+                        resp = requests.post(
+                            f"{_API_BASE}/api/v1/auth/start",
+                            json={"email": email},
+                            timeout=10,
+                        )
+                        resp.raise_for_status()
+                        data = resp.json()
                         st.session_state.auth_email = email
-                        st.session_state.auth_state = state
-                        st.session_state.auth_cv = cv
-                        st.session_state.auth_url = auth_url
-                        st.session_state.auth_step = "callback"
+                        st.session_state.auth_state = data["state"]
+                        st.session_state.auth_url = data["auth_url"]
+                        st.session_state.auth_step = "waiting"
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error al generar enlace: {e}")
+                        st.error(f"Error al iniciar autenticación: {e}")
 
-        elif step == "callback":
+        elif step == "waiting":
             st.info(
-                "**Paso 1:** Haz clic en el enlace de abajo y autentícate en Tesla.  \n"
-                "**Paso 2:** Después de autenticarte, copia la URL de la página de retorno "
-                "(empieza con `https://auth.tesla.com/void/callback?...`) y pégala aquí."
+                "Haz clic en el enlace, autentícate en Tesla y esta página se actualizará automáticamente."
             )
             st.link_button(
                 "Abrir autenticación Tesla",
                 st.session_state.auth_url,
                 use_container_width=True,
             )
-            st.divider()
-            with st.form("tesla_callback"):
-                callback = st.text_input(
-                    "URL de retorno",
-                    placeholder="https://auth.tesla.com/void/callback?code=...&state=...",
+
+            state = st.session_state.auth_state
+            try:
+                resp = requests.get(
+                    f"{_API_BASE}/api/v1/auth/status/{state}", timeout=5
                 )
-                col_ok, col_back = st.columns(2)
-                with col_ok:
-                    submitted = st.form_submit_button(
-                        "Completar autenticación", use_container_width=True
-                    )
-                with col_back:
-                    back = st.form_submit_button(
-                        "<- Volver", use_container_width=True
-                    )
-            if back:
-                for k in ("auth_step", "auth_email", "auth_state", "auth_cv", "auth_url"):
+                completed = resp.json().get("completed", False)
+            except Exception:
+                completed = False
+
+            if completed:
+                for k in ("auth_step", "auth_email", "auth_state", "auth_url"):
+                    st.session_state.pop(k, None)
+                st.success("¡Autenticado! Cargando dashboard...")
+                st.rerun()
+            else:
+                with st.spinner("Esperando autenticación en Tesla..."):
+                    time.sleep(2)
+                st.rerun()
+
+            if st.button("← Volver", key="auth_back"):
+                for k in ("auth_step", "auth_email", "auth_state", "auth_url"):
                     st.session_state.pop(k, None)
                 st.rerun()
-            if submitted:
-                if not callback:
-                    st.error("Pega la URL de retorno")
-                else:
-                    with st.spinner("Verificando..."):
-                        try:
-                            ok = auth.complete_auth(
-                                st.session_state.auth_email,
-                                callback,
-                                st.session_state.auth_state,
-                                st.session_state.auth_cv,
-                            )
-                        except Exception as e:
-                            st.error(f"Error: {e}")
-                            ok = False
-                    if ok:
-                        st.success("Autenticado! Cargando dashboard...")
-                        st.session_state.auth_step = "done"
-                        st.rerun()
-                    else:
-                        st.error(
-                            "Autenticación fallida. Verifica que la URL sea correcta."
-                        )
