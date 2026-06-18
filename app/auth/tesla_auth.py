@@ -4,6 +4,8 @@ from typing import Optional, Tuple
 
 import teslapy
 
+VOID_CALLBACK = "https://auth.tesla.com/void/callback"
+
 
 class MFARequiredError(Exception):
     pass
@@ -38,9 +40,11 @@ class TeslaAuthManager:
         tesla.scope = ('openid', 'email', 'offline_access', 'vehicle_device_data', 'vehicle_location', 'vehicle_cmds', 'vehicle_charging_cmds')
         state = tesla.new_state()
         code_verifier = tesla.new_code_verifier()
-        kwargs: dict = {"state": state, "code_verifier": code_verifier}
-        if redirect_uri:
-            kwargs["redirect_uri"] = redirect_uri
+        kwargs: dict = {
+            "state": state,
+            "code_verifier": code_verifier,
+            "redirect_uri": redirect_uri or VOID_CALLBACK,
+        }
         auth_url = tesla.authorization_url(**kwargs)
         return auth_url, state, code_verifier
 
@@ -54,9 +58,8 @@ class TeslaAuthManager:
             "authorization_response": callback_url,
             "state": state,
             "code_verifier": code_verifier,
+            "redirect_uri": redirect_uri or VOID_CALLBACK,
         }
-        if redirect_uri:
-            kwargs["redirect_uri"] = redirect_uri
         try:
             tesla.fetch_token(**kwargs)
         except Exception:
