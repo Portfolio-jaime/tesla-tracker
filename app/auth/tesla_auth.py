@@ -37,15 +37,11 @@ class TeslaAuthManager:
         """Start OAuth2 PKCE flow. Returns (auth_url, state, code_verifier)."""
         os.makedirs(os.path.dirname(os.path.abspath(self._token_path)), exist_ok=True)
         tesla = teslapy.Tesla(email, cache_file=self._token_path)
+        tesla.redirect_uri = redirect_uri or VOID_CALLBACK
         tesla.scope = ('openid', 'email', 'offline_access', 'vehicle_device_data', 'vehicle_location', 'vehicle_cmds', 'vehicle_charging_cmds')
         state = tesla.new_state()
         code_verifier = tesla.new_code_verifier()
-        kwargs: dict = {
-            "state": state,
-            "code_verifier": code_verifier,
-            "redirect_uri": redirect_uri or VOID_CALLBACK,
-        }
-        auth_url = tesla.authorization_url(**kwargs)
+        auth_url = tesla.authorization_url(state=state, code_verifier=code_verifier)
         return auth_url, state, code_verifier
 
     def complete_auth(
@@ -54,11 +50,11 @@ class TeslaAuthManager:
     ) -> bool:
         """Complete OAuth2 PKCE flow. Returns True on success."""
         tesla = teslapy.Tesla(email, cache_file=self._token_path)
+        tesla.redirect_uri = redirect_uri or VOID_CALLBACK
         kwargs: dict = {
             "authorization_response": callback_url,
             "state": state,
             "code_verifier": code_verifier,
-            "redirect_uri": redirect_uri or VOID_CALLBACK,
         }
         try:
             tesla.fetch_token(**kwargs)
