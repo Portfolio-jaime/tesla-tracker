@@ -194,7 +194,37 @@ if res_error:
     st.stop()
 
 if not reservations:
-    st.info("No hay reservas. Agrega una desde la API en `/docs`.")
+    st.info("No tienes vehículos registrados aún.")
+    with st.expander("➕ Agregar mi reserva / orden Tesla", expanded=True):
+        with st.form("add_reservation"):
+            col1, col2 = st.columns(2)
+            with col1:
+                model = st.selectbox("Modelo", ["Model Y", "Model 3", "Model S", "Model X", "Cybertruck"])
+                color = st.text_input("Color", placeholder="Pearl White, Midnight Silver...")
+            with col2:
+                status = st.selectbox("Estado actual", ["RESERVED", "CONFIRMED", "MANUFACTURING", "IN_TRANSIT", "DELIVERED"])
+                order_date = st.date_input("Fecha de orden")
+            notes = st.text_input("Notas (referencia, configuración...)", placeholder="Ej: Configuración premium, 7 asientos")
+            submitted = st.form_submit_button("Guardar reserva", use_container_width=True)
+
+        if submitted:
+            payload = {
+                "model": model,
+                "color": color,
+                "status": status,
+                "order_date": order_date.isoformat() + "T00:00:00",
+                "notes": notes or None,
+            }
+            try:
+                r = requests.post(f"{API_BASE_URL}/api/v1/reservations", json=payload, timeout=5)
+                if r.status_code == 201:
+                    st.success("Reserva guardada.")
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.error(f"Error {r.status_code}: {r.text}")
+            except Exception as e:
+                st.error(f"Error de conexión: {e}")
     st.stop()
 
 # Auto-select if only one reservation; show selector in sidebar if multiple

@@ -94,7 +94,7 @@ def render_login(auth: TeslaAuthManager) -> None:
                             try:
                                 requests.post(
                                     f"{_API_BASE}/api/v1/sync",
-                                    params={"clear_all": "true"},
+                                    params={"clear_all": "false"},
                                     timeout=30,
                                 )
                             except Exception:
